@@ -1,0 +1,245 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>House Price Predictor</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            padding: 24px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: Arial, sans-serif;
+            background: #f3f4f6;
+            color: #111827;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 450px;
+            padding: 32px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            margin: 0 0 24px;
+            text-align: center;
+            font-size: 26px;
+        }
+
+        .field {
+            margin-bottom: 16px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 6px;
+            color: #374151;
+        }
+
+        input, select {
+            width: 100%;
+            padding: 11px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 16px;
+            background: white;
+        }
+
+        input:focus, select:focus {
+            outline: 2px solid #93c5fd;
+            border-color: #2563eb;
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 6px;
+            background: #2563eb;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #1d4ed8;
+        }
+
+        #resultBox {
+            margin-top: 24px;
+            padding: 16px;
+            background: #eff6ff;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        #priceResult {
+            font-size: 26px;
+            font-weight: bold;
+            color: #1d4ed8;
+        }
+
+        #errorBox {
+            margin-top: 16px;
+            color: #dc2626;
+            font-size: 14px;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+
+<body>
+    <main class="container">
+        <h1>Housing Price Predictor</h1>
+
+        <form id="predictForm">
+            <div class="field">
+                <label for="SquareFeet">Square Feet</label>
+                <input type="number" id="SquareFeet"
+                       name="SquareFeet" min="1" required>
+            </div>
+
+            <div class="field">
+                <label for="Bedrooms">Bedrooms</label>
+                <input type="number" id="Bedrooms"
+                       name="Bedrooms" min="0" required>
+            </div>
+
+            <div class="field">
+                <label for="Bathrooms">Bathrooms</label>
+                <input type="number" id="Bathrooms"
+                       name="Bathrooms" min="0" step="0.5" required>
+            </div>
+
+
+            
+            <div class="field">
+                <label for="YearBuilt">Year Built</label>
+                <input
+                    type="number"
+                    id="YearBuilt"
+                    name="YearBuilt"
+                    min="1800"
+                    required
+                >
+            </div>
+
+
+            <div class="field">
+                <label for="Neighborhood">Neighborhood</label>
+                <select id="Neighborhood" name="Neighborhood" required>
+                    <option value="">Select a neighborhood</option>
+                    <option value="Rural">Rural</option>
+                    <option value="Suburb">Suburb</option>
+                    <option value="Urban">Urban</option>
+                </select>
+            </div>
+
+            <button type="submit">Predict Price</button>
+        </form>
+
+        <div id="resultBox" class="hidden" aria-live="polite">
+            <p>Predicted House Price</p>
+            <p id="priceResult"></p>
+        </div>
+
+        <p id="errorBox" class="hidden" role="alert"></p>
+    </main>
+
+
+    <script>
+        const form = document.getElementById("predictForm");
+        const resultBox = document.getElementById("resultBox");
+        const priceResult = document.getElementById("priceResult");
+        const errorBox = document.getElementById("errorBox");
+
+        // Get the Year Built input
+        const yearBuiltInput = document.getElementById("YearBuilt");
+
+        // Automatically set the maximum year to the current year
+        yearBuiltInput.max = new Date().getFullYear();
+
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault();
+
+            resultBox.classList.add("hidden");
+            errorBox.classList.add("hidden");
+
+            try {
+                const response = await fetch("/predict", {
+                    method: "POST",
+                    body: new FormData(form)
+                });
+
+                // Read the response as text first to avoid JSON parsing errors.
+                const responseText = await response.text();
+
+                console.log("HTTP status:", response.status);
+                console.log("Server response:", responseText);
+
+                // Convert the response text into JSON.
+                let data;
+
+                try {
+                    data = JSON.parse(responseText);
+                } catch {
+                    throw new Error(
+                        "The server did not return JSON. Check the VS Code terminal and browser console."
+                    );
+                }
+
+                // Display errors returned by FastAPI.
+                if (!response.ok) {
+                    const detail = data.detail;
+                    const message = typeof detail === "string"
+                        ? detail
+                        : JSON.stringify(detail || data);
+
+                    throw new Error(message || "Prediction failed.");
+                }
+
+                // Validate the predicted price.
+                if (typeof data.price !== "number" ||
+                    !Number.isFinite(data.price)) {
+                    throw new Error(
+                        "The server response does not contain a valid numeric price."
+                    );
+                }
+
+                // Display the predicted price.
+                priceResult.textContent = data.price.toLocaleString("en-US", {
+                    style: "currency",
+                    currency: "USD",
+                    maximumFractionDigits: 2
+                });
+
+                resultBox.classList.remove("hidden");
+
+            } catch (error) {
+                console.error("Prediction error:", error);
+
+                errorBox.textContent =
+                    error.message || "Unable to connect to the server.";
+
+                errorBox.classList.remove("hidden");
+            }
+        });
+    </script>
+
+</body>
+</html>
